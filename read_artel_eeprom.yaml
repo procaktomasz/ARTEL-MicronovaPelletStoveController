@@ -1,5 +1,5 @@
 esphome:
-  name: artel-eeprom
+  name: artel-micronova-eeprom
   includes:
     - eeprom_scanner.h
   on_boot:
