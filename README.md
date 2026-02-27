@@ -1,4 +1,4 @@
-# ARTEL - MicronovaPelletStoveController — Projekt
+# ARTEL - MicronovaPelletStoveController
 
 Projekt zawiera pliki pomocnicze do odczytu pamięci EEPROM i RAM pieca Artel Model: BOILER16AR-AUTO.
 
