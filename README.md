@@ -1,4 +1,4 @@
-# Artel BOILER16AR-AUTO — Projekt
+# ARTEL - MicronovaPelletStoveController — Projekt
 
 Projekt zawiera pliki pomocnicze do odczytu pamięci EEPROM i RAM pieca Artel Model: BOILER16AR-AUTO.
 
@@ -27,7 +27,8 @@ Główne elementy i możliwości po wgraniu `artel.yaml` na ESP32
 English
 ----------------
 
-This repository contains helper files for reading EEPROM and RAM of the Artel boiler Model: BOILER16AR-AUTO.
+This repository contains helper files for reading EEPROM and RAM of the Artel boiler Model: BOILER16AR-AUTO. The project name on GitHub is
+"ARTEL - MicronovaPelletStoveController".
 
 - Contents: header files and YAML configurations for reading/analysis: `eeprom_scanner.h`, `ram_scanner.h`, `artel.yaml`, `read_artel_eeprom.yaml`, `read_artel_ram.yaml`.
 

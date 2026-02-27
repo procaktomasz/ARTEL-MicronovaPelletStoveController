@@ -1,6 +1,6 @@
 substitutions:
   device_name: artel-gateway
-  friendly_name: "Artel"
+  friendly_name: "ARTEL - MicronovaPelletStoveController"
   czas_cyklu: "6.0" # Czas cyklu spalania w sekundach (domyślnie 6.0s), jest to czas od uruchomienia podajnika do jego ponownego uruchomienia (czyli czas pracy + czas przerwy).
   wydajnosc_ciagla: "4.8" # Wydajność ślimaka w kg/h. Kalibracja: (waga pelletu z 60s) * 60. 
                           # Załóżmy, że podczas testu serwisowego trwającego dokładnie 60 sekund, Twój ślimak podał do naczynia 80 gramów pelletu.
@@ -14,7 +14,7 @@ esphome:
   friendly_name: ${friendly_name}
   min_version: 2026.1.5
   project:
-    name: artel.piec
+    name: artel.micronova_pellet_controller
     version: "1.1.0"
   on_boot:
     priority: -100
