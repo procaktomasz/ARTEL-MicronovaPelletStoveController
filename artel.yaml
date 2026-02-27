@@ -1,0 +1,249 @@
+substitutions:
+  device_name: artel-gateway
+  friendly_name: "Artel"
+  czas_cyklu: "6.0" # Czas cyklu spalania w sekundach (domyślnie 6.0s), jest to czas od uruchomienia podajnika do jego ponownego uruchomienia (czyli czas pracy + czas przerwy).
+  wydajnosc_ciagla: "4.8" # Wydajność ślimaka w kg/h. Kalibracja: (waga pelletu z 60s) * 60. 
+                          # Załóżmy, że podczas testu serwisowego trwającego dokładnie 60 sekund, Twój ślimak podał do naczynia 80 gramów pelletu.
+                          # Obliczenie wygląda następująco:
+                          # Waga z 60 sekund: 0,08kg
+                          # Przelicznik na godzinę: 60 minut
+                          # Działanie: 0,08kg⋅60=4,8 kg/h
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  min_version: 2026.1.5
+  project:
+    name: artel.piec
+    version: "1.1.0"
+  on_boot:
+    priority: -100
+    then:
+      - component.update: piec_korekta_pelletu
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+  level: DEBUG
+  baud_rate: 115200
+
+wifi:
+  networks:
+    - ssid: !secret wifi_ssid
+      password: !secret wifi_password
+  fast_connect: true
+  min_auth_mode: WPA2
+  power_save_mode: NONE
+  output_power: 10
+
+
+api:
+
+ota:
+  - platform: esphome
+
+uart:
+  id: bus_1
+  tx_pin: 
+    number: GPIO17
+    inverted: true
+  rx_pin: 
+    number: GPIO16
+    inverted: false
+    mode:
+      input: true
+      pullup: true
+  baud_rate: 1200
+  stop_bits: 2
+
+micronova:
+  uart_id: bus_1
+  enable_rx_pin: 
+    number: GPIO33
+    inverted: true
+
+
+
+text_sensor:
+  # - platform: micronova
+  #   stove_state:
+  #     name: "Status pracy"
+  #     memory_location: 0x00
+  #     memory_address: 0x21     
+  #     update_interval: 10s
+  #     internal: true
+
+  - platform: template
+    name: "Aktualny stan"
+    icon: "mdi:information-outline"
+    lambda: |-
+      if (std::isnan(id(piec_status_raw).state)) return std::string("Brak danych");
+      int stan = (int)id(piec_status_raw).state;
+      if (stan == 0) return std::string("Wyłączony");
+      if (stan == 1) return std::string("Start");
+      if (stan == 2) return std::string("Ładowanie pelletu");
+      if (stan == 3) return std::string("Rozpalanie");
+      if (stan == 4) return std::string("Praca robocza");
+      
+      if (stan == 5) {
+        bool wentylator_stop = (!std::isnan(id(piec_wentylator).state) && id(piec_wentylator).state == 0.0);
+        bool niska_temp = (!std::isnan(id(piec_temp_spalin).state) && id(piec_temp_spalin).state < 60.0);
+        
+        if (wentylator_stop && niska_temp) {
+          return std::string("Tryb ECO / Wygaszony");
+        } else {
+          return std::string("Czyszczenie paleniska");
+        }
+      }
+      
+      if (stan == 6) return std::string("Końcowe wygaszanie");
+      if (stan == 7) return std::string("Tryb gotowości");
+      if (stan == 8) return std::string("Brak pelletu");
+      if (stan == 9) return std::string("Błąd rozpalania");
+      if (stan >= 10) return std::string("Alarm systemowy");
+      return std::string("Nieznany");
+
+sensor:
+  - platform: micronova
+    memory_address_sensor:
+      name: "Temperatura wody"
+      memory_location: 0x00
+      memory_address: 0x03
+      unit_of_measurement: "°C"
+      device_class: "temperature"
+      state_class: "measurement"
+      update_interval: 10s
+
+  - platform: micronova
+    fumes_temperature:
+      name: "Temperatura spalin"
+      id: piec_temp_spalin
+      memory_location: 0x00
+      memory_address: 0xFF
+      update_interval: 10s
+
+  - platform: micronova
+    memory_address_sensor:
+      name: "Ciśnienie wody"
+      id: piec_cisnienie_wody
+      memory_location: 0x00
+      memory_address: 0x6C
+      unit_of_measurement: "bar"
+      accuracy_decimals: 1
+      update_interval: 10s
+      filters:
+        - multiply: 0.1
+
+  - platform: micronova
+    memory_address_sensor:
+      name: "Prędkość wentylatora"
+      id: piec_wentylator
+      memory_location: 0x00
+      memory_address: 0x67
+      unit_of_measurement: "RPM"
+      update_interval: 10s
+      filters:
+        - lambda: |-
+            if (x == 0) return 0.0;
+            return (x * 10.0) + 250.0;
+
+  - platform: micronova
+    memory_address_sensor:
+      name: "Zadana moc"
+      id: piec_moc
+      memory_location: 0x00
+      memory_address: 0x64
+      update_interval: 10s
+      filters:
+        - lambda: |-
+            if (std::isnan(id(piec_status_raw).state)) return x;
+            int stan = (int)id(piec_status_raw).state;
+            if (stan == 0 || stan == 6 || stan == 7) return 0.0;
+            if (stan == 5) {
+              bool wentylator_stop = (!std::isnan(id(piec_wentylator).state) && id(piec_wentylator).state == 0.0);
+              bool niska_temp = (!std::isnan(id(piec_temp_spalin).state) && id(piec_temp_spalin).state < 60.0);
+              if (wentylator_stop && niska_temp) return 0.0;
+            }
+            return x;
+
+  - platform: micronova
+    memory_address_sensor:
+      name: "Status operacyjny RAW"
+      id: piec_status_raw
+      memory_location: 0x00
+      memory_address: 0x21
+      update_interval: 10s
+      internal: true
+
+  - platform: template
+    name: "Chwilowe spalanie"
+    unit_of_measurement: "kg/h"
+    state_class: "measurement"
+    update_interval: 10s
+    lambda: |-
+      if (std::isnan(id(piec_status_raw).state)) return 0.0;
+      int stan = (int)id(piec_status_raw).state;
+      float t_on = 0.0;
+      
+      if (stan == 2) {
+        t_on = 2.0; 
+      } else if (stan == 3) {
+        t_on = 2.2; 
+      } else if (stan == 4) {
+        if (std::isnan(id(piec_moc).state)) return 0.0;
+        int moc = (int)id(piec_moc).state;
+        switch(moc) {
+          case 1: t_on = 2.2; break;
+          case 2: t_on = 2.4; break;
+          case 3: t_on = 2.6; break;
+          case 4: t_on = 2.9; break;
+          case 5: t_on = 3.2; break;
+          case 6: t_on = 3.5; break;
+          case 7: t_on = 3.8; break;
+          case 8: t_on = 3.9; break;
+          case 9: t_on = 4.0; break;
+          default: t_on = 2.2; break; 
+        }
+      }
+      
+      // Dynamiczna aplikacja korekty
+      if (!std::isnan(id(piec_korekta_pelletu).state)) {
+        int korekta_raw = (int)id(piec_korekta_pelletu).state;
+        int korekta_kroki = korekta_raw - 9;
+        
+        // Obliczenie mnożnika (1 krok = 2% zmiany)
+        float mnoznik = 1.0 + (korekta_kroki * 0.02);
+        t_on = t_on * mnoznik;
+      }
+      
+      float t_c = atof("${czas_cyklu}");
+      float cap = atof("${wydajnosc_ciagla}");
+      
+      if (t_c <= 0.0) return 0.0;
+      return (t_on / t_c) * cap;
+
+  - platform: micronova
+    memory_address_sensor:
+      name: "Korekta pelletu RAW"
+      id: piec_korekta_pelletu
+      memory_location: 0x20
+      memory_address: 0x40
+      update_interval: never
+      internal: true
+
+
+button:
+  - platform: template
+    name: "Kalibruj czasy"
+    icon: "mdi:sync"
+    on_press:
+      - component.update: piec_korekta_pelletu
+# switch:
+#   - platform: micronova
+#     stove:
+#       name: "Włącznik główny"
+#       memory_location: 0x00   # Sterowanie stanem pieca (0x01 ON, 0x06 OFF) 
+#       memory_address: 0x21    # Działa OK, ale wyłącza piec całkowicie
